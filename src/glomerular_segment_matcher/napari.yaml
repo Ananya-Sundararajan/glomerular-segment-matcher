@@ -8,49 +8,24 @@ contributions:
   commands:
     - id: glomerular-segment-matcher.get_reader
       python_name: glomerular_segment_matcher._reader:napari_get_reader
-      title: Open data with Glomerular Segment Matcher
-    - id: glomerular-segment-matcher.write_multiple
-      python_name: glomerular_segment_matcher._writer:write_multiple
-      title: Save multi-layer data with Glomerular Segment Matcher
+      title: Open images and masks with Glomerular Segment Matcher
     - id: glomerular-segment-matcher.write_single_image
       python_name: glomerular_segment_matcher._writer:write_single_image
       title: Save image data with Glomerular Segment Matcher
-    - id: glomerular-segment-matcher.make_container_widget
-      python_name: glomerular_segment_matcher:ImageThreshold
-      title: Make threshold Container widget
-    - id: glomerular-segment-matcher.make_magic_widget
-      python_name: glomerular_segment_matcher:threshold_magic_widget
-      title: Make threshold magic widget
-    - id: glomerular-segment-matcher.make_function_widget
-      python_name: glomerular_segment_matcher:threshold_autogenerate_widget
-      title: Make threshold function widget
     - id: glomerular-segment-matcher.make_qwidget
-      python_name: glomerular_segment_matcher:ExampleQWidget
+      python_name: glomerular_segment_matcher:SegmentMatcher
       title: Make example QWidget
   readers:
     - command: glomerular-segment-matcher.get_reader
-      accepts_directories: false
-      filename_patterns: ['*.npy']
+      accepts_directories: true
+      filename_patterns: ['*.tif', '*.png']
   writers:
-    - command: glomerular-segment-matcher.write_multiple
-      layer_types: ['image*','labels*']
-      filename_extensions: []
     - command: glomerular-segment-matcher.write_single_image
-      layer_types: ['image']
-      filename_extensions: ['.npy']
+      layer_types: ['labels*']
+      filename_extensions: ['*.tif', '*.png']
   widgets:
-    - command: glomerular-segment-matcher.make_container_widget
-      display_name: Container Threshold
-    - command: glomerular-segment-matcher.make_magic_widget
-      display_name: Magic Threshold
-    - command: glomerular-segment-matcher.make_function_widget
-      autogenerate: true
-      display_name: Autogenerate Threshold
     - command: glomerular-segment-matcher.make_qwidget
-      display_name: Example QWidget
+      display_name: Segment Matcher
   menus:
     napari/layers/segment:
-      - command: glomerular-segment-matcher.make_container_widget
-      - command: glomerular-segment-matcher.make_magic_widget
-      - command: glomerular-segment-matcher.make_function_widget
       - command: glomerular-segment-matcher.make_qwidget

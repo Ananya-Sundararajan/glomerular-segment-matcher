@@ -33,6 +33,13 @@ dependencies = [
     "magicgui",
     "qtpy",
     "scikit-image",
+    "dask>=2026.3.0",
+    "napari[all]>=0.7.0",
+    "tifffile>=2025.5.10",
+    "natsort>=8.4.0",
+    "imageio>=2.37.3",
+    "pytest>=9.0.2",
+    "pre-commit>=4.5.1",
 ]
 
 [project.optional-dependencies]

@@ -1,17 +1,21 @@
-"""
-This module is an example of a barebones numpy reader plugin for napari.
-
-It implements the Reader specification, but your plugin may choose to
-implement multiple readers or even other plugin contributions. see:
-https://napari.org/stable/plugins/building_a_plugin/guides.html#readers
-"""
-
 import numpy as np
+import os
+import warnings
+from pathlib import Path
+import tifffile as tiff
+from natsort import natsorted
+import dask
+import imageio.v3 as iio
+import dask.array as da
+from napari.utils import progress
 
+IMAGE_FOLDER_NAME = 'images'
+MASK_FOLDER_NAME = 'masks'
+RECON_FOLDER_NAME = 'reconstructed'
 
 def napari_get_reader(path):
-    """A basic implementation of a Reader contribution.
 
+    """
     Parameters
     ----------
     path : str or list of str
@@ -20,42 +24,19 @@ def napari_get_reader(path):
     Returns
     -------
     function or None
-        If the path is a recognized format, return a function that accepts the
-        same path or list of paths, and returns a list of layer data tuples.
+        If the path is a directory of two folders of images and masks in format 
+        .tif or .png, return a function that accepts the same path or list of paths, 
+        and returns a list of layer data tuples.
     """
-    if isinstance(path, list):
-        # reader plugins may be handed single path, or a list of paths.
-        # if it is a list, it is assumed to be an image stack...
-        # so we are only going to look at the first file.
-        path = path[0]
 
-    # the get_reader function should make as many checks as possible
-    # (without loading the full file) to determine if it can read
-    # the path. Here, we check the dtype of the array by loading
-    # it with memmap, so that we don't actually load the full array into memory.
-    # We pretend that this reader can only read integer arrays.
-    try:
-        arr = np.load(path, mmap_mode='r')
-        if arr.dtype != np.int_:
-            return None
-    # napari_get_reader should never raise an exception, because napari
-    # raises its own specific errors depending on what plugins are
-    # available for the given path, so we catch
-    # the OSError that np.load might raise if the file is malformed
-    except OSError:
-        return None
-
-    # otherwise we return the *function* that can read ``path``.
-    return reader_function
+    path = Path(path)
+    if path.is_dir():
+        return reader_function
+    return None
 
 
 def reader_function(path):
-    """Take a path or list of paths and return a list of LayerData tuples.
-
-    Readers are expected to return data as a list of tuples, where each tuple
-    is (data, [add_kwargs, [layer_type]]), "add_kwargs" and "layer_type" are
-    both optional.
-
+    """
     Parameters
     ----------
     path : str or list of str
@@ -65,21 +46,146 @@ def reader_function(path):
     -------
     layer_data : list of tuples
         A list of LayerData tuples where each tuple in the list contains
-        (data, metadata, layer_type), where data is a numpy array, metadata is
-        a dict of keyword arguments for the corresponding viewer.add_* method
-        in napari, and layer_type is a lower-case string naming the type of
-        layer. Both "meta", and "layer_type" are optional. napari will
-        default to layer_type=="image" if not provided
+        (data, metadata, layer_type)
+            data: numpy array, 
+            metadata: dict,
+            layer_type: string
     """
-    # handle both a string and a list of strings
-    paths = [path] if isinstance(path, str) else path
-    # load all files into array
-    arrays = [np.load(_path) for _path in paths]
-    # stack arrays into single array
-    data = np.squeeze(np.stack(arrays))
+    
+    path = Path(path)
+    all_layer_data = []
 
-    # optional kwargs for the corresponding viewer.add_* method
-    add_kwargs = {}
+    # method to read in images (works for both tifs and pngs)
+    @dask.delayed
+    def read_image(im_path):
 
-    layer_type = 'image'  # optional, default is "image"
-    return [(data, add_kwargs, layer_type)]
+        img = iio.imread(im_path)
+        img = np.asarray(img)
+        img = np.squeeze(img)
+
+        if im_path.endswith(".tif"):
+            if img.ndim == 3:
+                # channel-last
+                if img.shape[-1] in (3, 4):
+                    img = img[..., 0]
+                # channel-first
+                elif img.shape[0] in (3, 4):
+                    img = img[0, ...]
+
+        if img.ndim < 2:
+            raise ValueError(f"{path.name} has unsupported shape {img.shape}. "
+                             "Only 2D or RGB images are supported.")
+        return img
+
+    # read in the reconstruction file paths (does not have to be inputted)
+    recon_dir = path / RECON_FOLDER_NAME
+    if recon_dir.exists():
+        recon_file_names = natsorted(os.listdir(recon_dir))
+        recon_file_paths = [os.path.join(recon_dir, f) for f in recon_file_names if f.endswith(".tif") or f.endswith(".png")]
+
+        num_recon = len(recon_file_paths)
+        # read in one reconstructed mask to get data type and shape
+        recon_shape = None
+        recon_dtype = None
+        if recon_file_names[0].endswith(".tif"):
+            recon = tiff.imread(recon_file_paths[0])
+            recon_shape = recon.shape
+            recon_dtype = recon.dtype
+        else:
+            recon = iio.imread(recon_file_paths[0])
+            recon_shape = recon.shape
+            recon_dtype = recon.dtype
+
+        recon_stack = [da.zeros(shape=recon_shape, dtype=recon_dtype) for _ in range(num_recon)]
+        
+        # create the stack with appropriate data for reconstructed masks
+        for i in progress(range(len(recon_file_paths))):
+            recon_path = recon_file_paths[i]
+            recon = da.from_delayed(read_image(recon_path), shape=recon_shape, dtype=recon_dtype)
+            recon_stack[i] = recon
+
+        recon_layer_data = da.stack(recon_stack)
+        recon_layer_type = "labels"
+        recon_layer_name = RECON_FOLDER_NAME
+        recon_add_kwargs = {"name": recon_layer_name}
+
+        all_layer_data.append((recon_layer_data, recon_add_kwargs, recon_layer_type))
+
+    # load in image file paths
+    image_dir = path / IMAGE_FOLDER_NAME
+    if not image_dir.exists():
+        warnings.warn("Valid image directory is not given.")
+    image_file_names = natsorted(os.listdir(image_dir))
+    image_file_paths = [os.path.join(image_dir, f) for f in image_file_names if f.endswith(".tif") or f.endswith(".png")]
+    
+    num_images = len(image_file_paths)
+
+    # read in one image to get data type and shape
+    im_shape = None
+    im_dtype = None
+    if image_file_names[0].endswith(".tif"):
+        im = tiff.imread(image_file_paths[0])
+        im_shape = im.shape
+        im_dtype = im.dtype
+    else:
+        im = iio.imread(image_file_paths[0])
+        im_shape = im.shape
+        im_dtype = im.dtype
+
+    # read in mask file paths
+    mask_dir = path / MASK_FOLDER_NAME
+    if not mask_dir.exists():
+        warnings.warn("Valid mask directory is not given.")
+    mask_file_names = natsorted(os.listdir(mask_dir))
+    mask_file_paths = [os.path.join(mask_dir, f) for f in mask_file_names if f.endswith(".tif") or f.endswith(".png")]
+
+    num_masks = len(mask_file_paths)
+    # read in one mask to get data type and shape
+    mask_shape = None
+    mask_dtype = None
+    if mask_file_names[0].endswith(".tif"):
+        mask = tiff.imread(mask_file_paths[0])
+        mask_shape = mask.shape
+        mask_dtype = mask.dtype
+    else:
+        mask = iio.imread(mask_file_paths[0])
+        mask_shape = mask.shape
+        mask_dtype = mask.dtype
+
+    # if mask shape and image shape are not the same then raise error
+    if num_masks != num_images:
+        raise ValueError(f"{num_images} images found, but {num_masks} masks found.")
+    if num_recon != num_images:
+            raise ValueError(f"{num_recon} reconstructed masks found, but {num_images} masks found.")
+    
+    # initialize stack size
+    image_stack = [da.zeros(shape=im_shape, dtype=im_dtype) for _ in range(num_images)]
+    mask_stack = [da.zeros(shape=mask_shape, dtype=mask_dtype) for _ in range(num_masks)]
+    
+    # create the stack with appropriate data for images
+    for i in progress(range(len(image_file_paths))):
+        image_path = image_file_paths[i]
+        image = da.from_delayed(read_image(image_path), shape=im_shape, dtype=im_dtype)
+        image_stack[i] = image
+
+    image_layer_data = da.stack(image_stack)
+    image_layer_type = "image"
+    image_layer_name = IMAGE_FOLDER_NAME
+    image_add_kwargs = {"name": image_layer_name}
+
+    # create the stack with appropriate data for masks
+    for i in progress(range(len(mask_file_paths))):
+        mask_path = mask_file_paths[i]
+        mask = da.from_delayed(read_image(mask_path), shape=mask_shape, dtype=mask_dtype)
+        mask_stack[i] = mask
+
+    mask_layer_data = da.stack(mask_stack)
+    mask_layer_type = "labels"
+    mask_layer_name = MASK_FOLDER_NAME
+    mask_add_kwargs = {"name": mask_layer_name}
+
+    # append both image layer and mask layer
+    all_layer_data.append((image_layer_data, image_add_kwargs, image_layer_type))
+    all_layer_data.append((mask_layer_data, mask_add_kwargs, mask_layer_type))
+
+    return all_layer_data
