@@ -1,11 +1,7 @@
 # glomerular-segment-matcher
 
-[![License MIT](https://img.shields.io/pypi/l/glomerular-segment-matcher.svg?color=green)](https://github.com/Ananya-Sundararajan/glomerular-segment-matcher/raw/main/LICENSE)
 [![PyPI](https://img.shields.io/pypi/v/glomerular-segment-matcher.svg?color=green)](https://pypi.org/project/glomerular-segment-matcher)
-[![Python Version](https://img.shields.io/pypi/pyversions/glomerular-segment-matcher.svg?color=green)](https://python.org)
 [![tests](https://github.com/Ananya-Sundararajan/glomerular-segment-matcher/workflows/tests/badge.svg)](https://github.com/Ananya-Sundararajan/glomerular-segment-matcher/actions)
-[![codecov](https://codecov.io/gh/Ananya-Sundararajan/glomerular-segment-matcher/branch/main/graph/badge.svg)](https://codecov.io/gh/Ananya-Sundararajan/glomerular-segment-matcher)
-[![napari hub](https://img.shields.io/endpoint?url=https://api.napari-hub.org/shields/glomerular-segment-matcher)](https://napari-hub.org/plugins/glomerular-segment-matcher)
 [![npe2](https://img.shields.io/badge/plugin-npe2-blue?link=https://napari.org/stable/plugins/index.html)](https://napari.org/stable/plugins/index.html)
 [![Copier](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/copier-org/copier/master/img/badge/badge-grayscale-inverted-border-purple.json)](https://github.com/copier-org/copier)
 
@@ -22,6 +18,12 @@ https://github.com/napari/napari-plugin-template#getting-started
 and review the napari docs for plugin developers:
 https://napari.org/stable/plugins/index.html
 -->
+
+## Data Folders Set Up
+Create a directory with 2 folders labeled "images" and "masks."
+If reconstructed masks are also available, you can also have a 3rd folder in the directory labeled "reconstructed."
+
+This plugin only accepts .tif or .png across all three folders that may be given as input. When dragging and dropping the directory into napari, make sure to open with "Glomerular Segment Matcher."
 
 ## Installation
 
