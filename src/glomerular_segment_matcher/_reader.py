@@ -92,7 +92,7 @@ def reader_function(path):
         recon_file_paths = [
             os.path.join(recon_dir, f)
             for f in recon_file_names
-            if f.endswith(['.tif', '.png'])
+            if f.endswith(('.tif', '.png'))
         ]
 
         num_recon = len(recon_file_paths)
@@ -140,7 +140,7 @@ def reader_function(path):
     image_file_paths = [
         os.path.join(image_dir, f)
         for f in image_file_names
-        if f.endswith(['.tif', '.png'])
+        if f.endswith(('.tif', '.png'))
     ]
 
     num_images = len(image_file_paths)
@@ -165,7 +165,7 @@ def reader_function(path):
     mask_file_paths = [
         os.path.join(mask_dir, f)
         for f in mask_file_names
-        if f.endswith(['.tif', '.png'])
+        if f.endswith(('.tif', '.png'))
     ]
 
     num_masks = len(mask_file_paths)

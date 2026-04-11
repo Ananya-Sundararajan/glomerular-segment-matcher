@@ -80,7 +80,7 @@ class SegmentMatcher(QWidget):
         ):
             return
 
-        # identify all base stacks from the reader
+        # Identify all base stacks
         recon_base_layers = [
             layer
             for layer in self.viewer.layers
@@ -104,67 +104,83 @@ class SegmentMatcher(QWidget):
 
         self.update_labels()
 
-        # image layer handling
+        # ---------------- IMAGE ----------------
         if self.left_img_layer is None:
-            self.right_img_layer = self.viewer.add_image(
-                right_img, name=f'Pos {i + 1} Image'
-            )
             self.left_img_layer = self.viewer.add_image(
                 left_img, name=f'Pos {i} Image'
             )
-        else:
-            self.right_img_layer.data = right_img
-            self.left_img_layer.data = left_img
-            self.right_img_layer.name = f'Pos {i + 1} Image'
-            self.left_img_layer.name = f'Pos {i} Image'
+            self.left_img_layer.grid_index = (0, 0)
 
-        # reconstruction layer handling
-        for (
-            r_layer
-        ) in recon_base_layers:  # loop through all base reconstruction stacks
+            self.right_img_layer = self.viewer.add_image(
+                right_img, name=f'Pos {i + 1} Image'
+            )
+            self.right_img_layer.grid_index = (0, 1)
+        else:
+            self.left_img_layer.data = left_img
+            self.right_img_layer.data = right_img
+            self.left_img_layer.name = f'Pos {i} Image'
+            self.right_img_layer.name = f'Pos {i + 1} Image'
+
+            self.left_img_layer.grid_index = (0, 0)
+            self.right_img_layer.grid_index = (0, 1)
+
+        # ---------------- RECON ----------------
+        for r_layer in recon_base_layers:
             r_data = r_layer.data
             l_data = np.asarray(r_data[i])
             rs_data = np.asarray(r_data[i + 1])
-
             suffix = r_layer.name.replace(RECON_FOLDER_NAME, '')
 
-            # check if we already created view layers for this specific suffix
             if suffix not in self.left_recon_layers:
-                self.right_recon_layers[suffix] = self.viewer.add_labels(
-                    rs_data, name=f'Pos {i + 1} Recon{suffix}'
-                )
-                self.right_recon_layers[suffix].visible = False
                 self.left_recon_layers[suffix] = self.viewer.add_labels(
                     l_data, name=f'Pos {i} Recon{suffix}'
                 )
+                self.left_recon_layers[suffix].grid_index = (0, 0)
                 self.left_recon_layers[suffix].visible = False
+
+                self.right_recon_layers[suffix] = self.viewer.add_labels(
+                    rs_data, name=f'Pos {i + 1} Recon{suffix}'
+                )
+                self.right_recon_layers[suffix].grid_index = (0, 1)
+                self.right_recon_layers[suffix].visible = False
             else:
-                self.right_recon_layers[suffix].data = rs_data
                 self.left_recon_layers[suffix].data = l_data
+                self.right_recon_layers[suffix].data = rs_data
+
+                self.left_recon_layers[suffix].name = f'Pos {i} Recon{suffix}'
                 self.right_recon_layers[
                     suffix
                 ].name = f'Pos {i + 1} Recon{suffix}'
-                self.left_recon_layers[suffix].name = f'Pos {i} Recon{suffix}'
 
-        # mask layer handling
+                self.left_recon_layers[suffix].grid_index = (0, 0)
+                self.right_recon_layers[suffix].grid_index = (0, 1)
+
+        # ---------------- MASK ----------------
         if self.left_mask_layer is None:
-            self.right_mask_layer = self.viewer.add_labels(
-                right_mask, name=f'Pos {i + 1} Mask'
-            )
-            self.right_mask_layer.mouse_drag_callbacks.append(
-                self._after_matching
-            )
             self.left_mask_layer = self.viewer.add_labels(
                 left_mask, name=f'Pos {i} Mask'
             )
+            self.left_mask_layer.grid_index = (0, 0)
             self.left_mask_layer.mouse_drag_callbacks.append(
                 self._transfer_label
             )
+
+            self.right_mask_layer = self.viewer.add_labels(
+                right_mask, name=f'Pos {i + 1} Mask'
+            )
+            self.right_mask_layer.grid_index = (0, 1)
+            self.right_mask_layer.mouse_drag_callbacks.append(
+                self._after_matching
+            )
         else:
-            self.right_mask_layer.data = right_mask
             self.left_mask_layer.data = left_mask
-            self.right_mask_layer.name = f'Pos {i + 1} Mask'
+            self.right_mask_layer.data = right_mask
+
             self.left_mask_layer.name = f'Pos {i} Mask'
+            self.right_mask_layer.name = f'Pos {i + 1} Mask'
+
+            self.left_mask_layer.grid_index = (0, 0)
+            self.right_mask_layer.grid_index = (0, 1)
 
         QTimer.singleShot(0, self._set_active)
         self.label.setText(f'Matching: Slices {self.idx} and {self.idx + 1}')
@@ -178,6 +194,7 @@ class SegmentMatcher(QWidget):
         self.right_mask_layer.name = f'Pos {i + 1} Mask'
         self.left_mask_layer.name = f'Pos {i} Mask'
 
+        # Loop through dictionaries to rename all reconstruction view layers
         for suffix, layer in self.left_recon_layers.items():
             layer.name = f'Pos {i} Recon{suffix}'
         for suffix, layer in self.right_recon_layers.items():
@@ -189,37 +206,11 @@ class SegmentMatcher(QWidget):
     def update_labels(self):
         label_pos = np.array([[-30, 0]])
 
-        # --- RIGHT LABEL ---
-        if 'UI_Label_Right' in self.viewer.layers:
-            layer_r = self.viewer.layers['UI_Label_Right']
-            layer_r.data = label_pos
-            layer_r.features = {'txt': [f'Slice {self.idx + 1}']}
-            layer_r.refresh_text()
-            # layer_r.grid_index = (0, 1)
-        else:
-            layer_r = self.viewer.add_points(
-                label_pos,
-                name='UI_Label_Right',
-                features={'txt': [f'Slice {self.idx + 1}']},
-                text={
-                    'string': '{txt}',
-                    'size': 20,
-                    'color': 'white',
-                    'anchor': 'upper_left',
-                },
-                size=0,
-                face_color='transparent',
-                border_color='transparent',
-            )
-            # layer_r.grid_index = (0, 1) # Force Right
-
-        # --- LEFT LABEL ---
         if 'UI_Label_Left' in self.viewer.layers:
             layer_l = self.viewer.layers['UI_Label_Left']
             layer_l.data = label_pos
             layer_l.features = {'txt': [f'Slice {self.idx}']}
             layer_l.refresh_text()
-            # layer_l.grid_index = (0, 0)
         else:
             layer_l = self.viewer.add_points(
                 label_pos,
@@ -235,7 +226,27 @@ class SegmentMatcher(QWidget):
                 face_color='transparent',
                 border_color='transparent',
             )
-            # layer_l.grid_index = (0, 0)
+
+        if 'UI_Label_Right' in self.viewer.layers:
+            layer_r = self.viewer.layers['UI_Label_Right']
+            layer_r.data = label_pos
+            layer_r.features = {'txt': [f'Slice {self.idx + 1}']}
+            layer_r.refresh_text()
+        else:
+            layer_r = self.viewer.add_points(
+                label_pos,
+                name='UI_Label_Right',
+                features={'txt': [f'Slice {self.idx + 1}']},
+                text={
+                    'string': '{txt}',
+                    'size': 20,
+                    'color': 'white',
+                    'anchor': 'upper_left',
+                },
+                size=0,
+                face_color='transparent',
+                border_color='transparent',
+            )
 
     def _transfer_label(self, layer, event):
         # we dont want it to keep moving to the other layer if we didn't pick a label
